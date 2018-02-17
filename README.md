@@ -1,17 +1,14 @@
 # FluxMQ
 
-Mainflux MQTT broker.
+Mainflux MQTT broker. Highly experimental and pretty much unusable at this stage.
 
 ### Installation
-
-Installing FluxMQ is trivial [`go get`](https://golang.org/cmd/go/):
 ```bash
 go get github.com/mainflux/fluxmq
-$GOBIN/fluxmq
 ```
 
 ### Documentation
-Development documentation can be found on our [Mainflux GitHub Wiki](https://github.com/Mainflux/mainflux/wiki).
+WIP
 
 ### Community
 #### Mailing list
