@@ -1,6 +1,11 @@
-package fluxmq
+// Copyright (c) Drasko DRASKOVIC
+// SPDX-License-Identifier: Apache-2.0
+
+package server
 
 import (
+	"errors"
+	"io"
 	"net"
 	"strconv"
 	"time"
@@ -9,13 +14,45 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defKeepAlive      = 300
+	defConnectTimeout = 2
+	defAckTimeout     = 20
+	defTimeoutRetries = 3
+)
+
 var (
-	ErrInvalidConnectionType  error = errors.New("Invalid connection type")
-	ErrInvalidSubscriber      error = errors.New("Invalid subscriber")
+	ErrInvalidConnectionType error = errors.New("Invalid connection type")
+	ErrInvalidSubscriber     error = errors.New("Invalid subscriber")
 )
 
 // Server is our main struct.
 type Server struct {
+	// The number of seconds to keep the connection live if there's no data.
+	// If not set then default to 5 mins.
+	keepAlive int
+
+	// The number of seconds to wait for the CONNECT message before disconnecting.
+	// If not set then default to 2 seconds.
+	connectTimeout int
+
+	// The number of seconds to wait for any ACK messages before failing.
+	// If not set then default to 20 seconds.
+	ackTimeout int
+
+	// The number of times to retry sending a packet if ACK is not received.
+	// If no set then default to 3 retries.
+	timeoutRetries int
+
+	// SessionsProvider is the session store that keeps all the Session objects.
+	// This is the store to check if CleanSession is set to 0 in the CONNECT message.
+	// If not set then default to "mem".
+	sessionRepo string
+
+	// TopicsProvider is the topic store that keeps all the subscription topics.
+	// If not set then default to "mem".
+	topicRepo string
+
 	running      bool
 	listener     net.Listener
 	clients      map[uint64]*Client
@@ -30,11 +67,16 @@ type Server struct {
 // New will setup a new server struct after parsing the options.
 func New(host string, port int, logger *zap.Logger) *Server {
 	s := &Server{
-		host:   host,
-		port:   port,
-		done:   make(chan bool, 1),
-		start:  time.Now(),
-		logger: logger,
+		host:           host,
+		port:           port,
+		done:           make(chan bool, 1),
+		start:          time.Now(),
+		logger:         logger,
+		keepAlive:      defKeepAlive,
+		connectTimeout: defConnectTimeout,
+		timeoutRetries: defTimeoutRetries,
+		ackTimeout:     defAckTimeout,
+		timeoutRetries: defTimeoutRetries,
 	}
 
 	// For tracking clients
@@ -48,27 +90,24 @@ func (s *Server) isRunning() bool {
 	return s.running
 }
 
-// Start up the server, this will block.
-func (s *Server) Start() {
+// ListenAndServe of the server, this will block.
+func (s *Server) ListenAndServe() error {
+	// We are started
 	s.running = true
 
-	// Wait for clients.
-	s.acceptLoop()
-}
-
-func (s *Server) acceptLoop() {
 	hp := net.JoinHostPort(s.host, strconv.Itoa(s.port))
 
 	l, err := net.Listen("tcp", hp)
 	if err != nil {
-		s.logger.Error("Failed to start", zap.Error(err))
-		return
+		s.logger.Error("Failed to get listener", zap.Error(err))
+		return err
 	}
 	defer l.Close()
 
 	// Setup state that can enable shutdown
 	s.listener = l
 
+	// Acceptor loop
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -95,8 +134,6 @@ func (s *Server) handleConnection(c io.Closer) (session *Session, err error) {
 			c.Close()
 		}
 	}()
-
-	s.configure()
 
 	conn, ok := c.(net.Conn)
 	if !ok {
@@ -134,17 +171,7 @@ func (s *Server) handleConnection(c io.Closer) (session *Session, err error) {
 		req.SetKeepAlive(minKeepAlive)
 	}
 
-	session := &Session{
-		id:     atomic.AddUint64(&gsvcid, 1),
-		client: false,
-
-		keepAlive:      int(req.KeepAlive()),
-		connectTimeout: s.ConnectTimeout,
-		ackTimeout:     s.AckTimeout,
-		timeoutRetries: s.TimeoutRetries,
-
-		conn:      conn,
-	}
+	session := session.New(s.connectTimeout, s.ackTimeout, s.timeoutRetries)
 
 	resp.SetReturnCode(message.ConnectionAccepted)
 
@@ -163,26 +190,4 @@ func (s *Server) handleConnection(c io.Closer) (session *Session, err error) {
 	s.logger.Info("(%s) server/handleConnection: Connection established.", session.id())
 
 	return session, nil
-}
-
-func (s *Server) configure() {
-	var err error
-
-	if s.KeepAlive == 0 {
-		s.KeepAlive = DefaultKeepAlive
-	}
-
-	if s.ConnectTimeout == 0 {
-		s.ConnectTimeout = DefaultConnectTimeout
-	}
-
-	if s.AckTimeout == 0 {
-		s.AckTimeout = DefaultAckTimeout
-	}
-
-	if s.TimeoutRetries == 0 {
-		s.TimeoutRetries = DefaultTimeoutRetries
-	}
-
-	return
 }

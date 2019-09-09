@@ -1,12 +1,9 @@
-//
-// Copyright (c) 2018
-// SurgeMQ
-// Mainflux
-//
+// Copyright (c) Mainflux
 // SPDX-License-Identifier: Apache-2.0
-//
 
-package fluxmq
+package server
+
+import "github.com/mainflux/fluxmq/pkg/session"
 
 // Client is a library implementation of the MQTT client that, as best it can, complies
 // with the MQTT 3.1 and 3.1.1 specs.
@@ -27,5 +24,5 @@ type Client struct {
 	// If no set then default to 3 retries.
 	TimeoutRetries int
 
-	session *Session
+	session *session.Session
 }

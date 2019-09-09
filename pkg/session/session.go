@@ -1,9 +1,13 @@
-package fluxmq
+// Copyright (c) Drasko DRASKOVIC
+// SPDX-License-Identifier: Apache-2.0
+
+package session
 
 import (
 	"bufio"
-	"net"
 	"io"
+	"net"
+	"sync/atomic"
 )
 
 type Session struct {
@@ -34,6 +38,20 @@ type Session struct {
 	closed int64
 }
 
+func (s *Session) New(connectTout, ackTout, toutRetries int) error {
+	return &Session{
+		id:     atomic.AddUint64(&gsvcid, 1),
+		client: false,
+
+		keepAlive:      int(req.KeepAlive()),
+		connectTimeout: connectTout,
+		ackTimeout:     ackTout,
+		timeoutRetries: toutRetries,
+
+		conn: conn,
+	}
+}
+
 func (s *Session) Establish() error {
 	// TODO
 	return nil
@@ -45,7 +63,7 @@ func (s *Session) Close() {
 
 // Read client data from channel
 func (s *Session) Receive() {
-	reader := bufio.NewReader(c.conn)
+	reader := bufio.NewReader(s.conn)
 	for {
 		message, err := reader.ReadString('\n')
 		if err != nil {
@@ -59,17 +77,17 @@ func (s *Session) Receive() {
 }
 
 // Send text message to client
-func (s *Client) Send(message string) error {
+func (s *Session) Send(message string) error {
 	_, err := s.conn.Write([]byte(message))
 	return err
 }
 
 // Send bytes to client
-func (c *Client) SendBytes(b []byte) error {
+func (s *Session) SendBytes(b []byte) error {
 	_, err := s.conn.Write(b)
 	return err
 }
 
-func (c *Client) Conn() net.Conn {
+func (s *Session) Conn() net.Conn {
 	return s.conn
 }

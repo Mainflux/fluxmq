@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/mainflux/fluxmq"
+	"github.com/mainflux/fluxmq/pkg/server"
 	"go.uber.org/zap"
 )
 
@@ -17,8 +17,8 @@ func main() {
 	logger.Info("Starting FluxMQ", zap.Int("port", port))
 
 	// Create the server with appropriate options.
-	f := fluxmq.New(host, port, logger)
+	s := server.New(host, port, logger)
 
 	// Start things up. Block here until done.
-	f.Start()
+	s.ListenAndServe()
 }
