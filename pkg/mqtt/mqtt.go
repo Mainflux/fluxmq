@@ -5,9 +5,9 @@ import (
 	"io"
 	"net"
 
+	"github.com/mainflux/fluxmq/pkg/session"
 	"github.com/mainflux/mainflux/errors"
 	"github.com/mainflux/mainflux/logger"
-	"github.com/mainflux/mproxy/pkg/session"
 )
 
 // Proxy is main MQTT proxy struct

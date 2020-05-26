@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/mainflux/fluxmq/pkg/session"
 	"github.com/mainflux/mainflux/logger"
-	"github.com/mainflux/mproxy/pkg/session"
 )
 
 // Proxy represents WS Proxy.

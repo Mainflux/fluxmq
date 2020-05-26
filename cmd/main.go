@@ -8,11 +8,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/mainflux/fluxmq/examples/simple"
+	"github.com/mainflux/fluxmq/pkg/mqtt"
+	"github.com/mainflux/fluxmq/pkg/session"
+	"github.com/mainflux/fluxmq/pkg/websocket"
 	mflog "github.com/mainflux/mainflux/logger"
-	"github.com/mainflux/mproxy/examples/simple"
-	"github.com/mainflux/mproxy/pkg/mqtt"
-	"github.com/mainflux/mproxy/pkg/session"
-	"github.com/mainflux/mproxy/pkg/websocket"
 )
 
 const (
@@ -89,7 +89,7 @@ func main() {
 	}()
 
 	err = <-errs
-	logger.Error(fmt.Sprintf("mProxy terminated: %s", err))
+	logger.Error(fmt.Sprintf("FluxMQ terminated: %s", err))
 }
 
 func env(key, fallback string) string {

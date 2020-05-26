@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mainflux/fluxmq/pkg/session"
 	"github.com/mainflux/mainflux/logger"
-	"github.com/mainflux/mproxy/pkg/session"
 )
 
 var _ session.Handler = (*Handler)(nil)

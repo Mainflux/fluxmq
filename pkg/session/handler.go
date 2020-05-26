@@ -1,6 +1,6 @@
 package session
 
-// Handler is an interface for mProxy hooks
+// Handler is an interface for FluxMQ hooks
 type Handler interface {
 	// Authorization on client `CONNECT`
 	// Each of the params are passed by reference, so that it can be changed
