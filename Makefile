@@ -1,4 +1,4 @@
-# Copyright (c) Drasko DRASKOVIC
+# Copyright (c) Mainflux
 # SPDX-License-Identifier: Apache-2.0
 
 PROGRAM = fluxmq
@@ -6,7 +6,7 @@ SOURCES = $(wildcard *.go) cmd/main.go
 
 all: $(PROGRAM)
 
-.PHONY: all clean
+.PHONY: all clean $(PROGRAM)
 
 $(PROGRAM): $(SOURCES)
 	go build -ldflags "-s -w" -o $@ cmd/main.go

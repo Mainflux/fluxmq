@@ -1,93 +1,138 @@
-// Copyright (c) Drasko DRASKOVIC
-// SPDX-License-Identifier: Apache-2.0
-
 package session
 
 import (
-	"bufio"
-	"io"
 	"net"
-	"sync/atomic"
+
+	"github.com/eclipse/paho.mqtt.golang/packets"
+	"github.com/mainflux/mainflux/errors"
+	"github.com/mainflux/mainflux/logger"
 )
 
+const (
+	up direction = iota
+	down
+)
+
+var (
+	errBroker = errors.New("error between mProxy and MQTT broker")
+	errClient = errors.New("error between mProxy and MQTT client")
+)
+
+type direction int
+
+// Session represents MQTT Proxy session between client and broker.
 type Session struct {
-	// The ID of this session, it's not related to the Client ID, just a number that's
-	// incremented for every new session.
-	id uint64
-
-	// The number of seconds to keep the connection live if there's no data.
-	// If not set then default to 5 mins.
-	keepAlive int
-
-	// The number of seconds to wait for the CONNACK message before disconnecting.
-	// If not set then default to 2 seconds.
-	connectTimeout int
-
-	// The number of seconds to wait for any ACK messages before failing.
-	// If not set then default to 20 seconds.
-	ackTimeout int
-
-	// The number of times to retry sending a packet if ACK is not received.
-	// If no set then default to 3 retries.
-	timeoutRetries int
-
-	// Network connection for this session
-	conn io.Closer
-
-	// Whether this is service is closed or not.
-	closed int64
+	logger   logger.Logger
+	inbound  net.Conn
+	outbound net.Conn
+	handler  Handler
+	Client   Client
 }
 
-func (s *Session) New(connectTout, ackTout, toutRetries int) error {
+// New creates a new Session.
+func New(inbound, outbound net.Conn, handler Handler, logger logger.Logger) *Session {
 	return &Session{
-		id:     atomic.AddUint64(&gsvcid, 1),
-		client: false,
-
-		keepAlive:      int(req.KeepAlive()),
-		connectTimeout: connectTout,
-		ackTimeout:     ackTout,
-		timeoutRetries: toutRetries,
-
-		conn: conn,
+		logger:   logger,
+		inbound:  inbound,
+		outbound: outbound,
+		handler:  handler,
 	}
 }
 
-func (s *Session) Establish() error {
-	// TODO
-	return nil
+// Stream starts proxying traffic between client and broker.
+func (s *Session) Stream() error {
+	// In parallel read from client, send to broker
+	// and read from broker, send to client.
+	errs := make(chan error, 2)
+
+	go s.stream(up, s.inbound, s.outbound, errs)
+	go s.stream(down, s.outbound, s.inbound, errs)
+
+	// Handle whichever error happens first.
+	// The other routine won't be blocked when writing
+	// to the errors channel because it is buffered.
+	err := <-errs
+
+	s.handler.Disconnect(&s.Client)
+	return err
 }
 
-func (s *Session) Close() {
-	// TODO
-}
-
-// Read client data from channel
-func (s *Session) Receive() {
-	reader := bufio.NewReader(s.conn)
+func (s *Session) stream(dir direction, r, w net.Conn, errs chan error) {
 	for {
-		message, err := reader.ReadString('\n')
+		// Read from one connection
+		pkt, err := packets.ReadPacket(r)
 		if err != nil {
-			s.conn.Close()
-			//c.server.onClientConnectionClosed(c, err)
+			errs <- wrap(err, dir)
 			return
 		}
-		//c.server.onNewMessage(c, message)
-		println(message)
+
+		if dir == up {
+			if err := s.authorize(pkt); err != nil {
+				errs <- wrap(err, dir)
+				return
+			}
+		}
+
+		// Send to another
+		if err := pkt.Write(w); err != nil {
+			errs <- wrap(err, dir)
+			return
+		}
+
+		if dir == up {
+			s.notify(pkt)
+		}
 	}
 }
 
-// Send text message to client
-func (s *Session) Send(message string) error {
-	_, err := s.conn.Write([]byte(message))
-	return err
+func (s *Session) authorize(pkt packets.ControlPacket) error {
+	switch p := pkt.(type) {
+	case *packets.ConnectPacket:
+		s.Client = Client{
+			ID:       p.ClientIdentifier,
+			Username: p.Username,
+			Password: p.Password,
+		}
+		if err := s.handler.AuthConnect(&s.Client); err != nil {
+			return err
+		}
+		// Copy back to the packet in case values are changed by Event handler.
+		// This is specific to CONN, as only that package type has credentials.
+		p.ClientIdentifier = s.Client.ID
+		p.Username = s.Client.Username
+		p.Password = s.Client.Password
+		return nil
+	case *packets.PublishPacket:
+		return s.handler.AuthPublish(&s.Client, &p.TopicName, &p.Payload)
+	case *packets.SubscribePacket:
+		return s.handler.AuthSubscribe(&s.Client, &p.Topics)
+	default:
+		return nil
+	}
 }
 
-// Send bytes to client
-func (s *Session) SendBytes(b []byte) error {
-	_, err := s.conn.Write(b)
-	return err
+func (s *Session) notify(pkt packets.ControlPacket) {
+	switch p := pkt.(type) {
+	case *packets.ConnectPacket:
+		s.handler.Connect(&s.Client)
+	case *packets.PublishPacket:
+		s.handler.Publish(&s.Client, &p.TopicName, &p.Payload)
+	case *packets.SubscribePacket:
+		s.handler.Subscribe(&s.Client, &p.Topics)
+	case *packets.UnsubscribePacket:
+		s.handler.Unsubscribe(&s.Client, &p.Topics)
+	default:
+		return
+	}
 }
 
-func (s *Session) Conn() net.Conn {
-	return s.conn
+func wrap(err error, dir direction) error {
+	switch dir {
+	case up:
+		return errors.Wrap(errClient, err)
+	case down:
+		return errors.Wrap(errBroker, err)
+	default:
+		return err
+	}
 }

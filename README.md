@@ -1,24 +1,20 @@
 # FluxMQ
+FluxMQ is simple, fast and lean MQTT broker made for the purposes of [Mainflux IoT Platform](https://github.com/mainflux/mainflux).
 
-Mainflux MQTT broker. Highly experimental and pretty much unusable at this stage.
+FluxMQ is built to be HA and FT, network partition tolerable and scales horizontaly via RAFT protocol and gPRC comm.
 
-### Installation
+Still in early prototype mode, being built on existing [mProxy](https://github.com/mainflux/mproxy) base.
+
+## Usage
 ```bash
 go get github.com/mainflux/fluxmq
+cd $(GOPATH)/github.com/mainflux/fluxmq
+make
+./fluxmq
 ```
 
-### Documentation
-WIP
+## Deployment
+TBD
 
-### Community
-#### Mailing list
-- [mainflux](https://groups.google.com/forum/#!forum/mainflux)
-
-#### IRC
-[Mainflux Gitter](https://gitter.im/Mainflux/mainflux?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
-#### Twitter
-[@mainflux](https://twitter.com/mainflux)
-
-### License
-[Apache License, version 2.0](LICENSE)
+## License
+[Apache-2.0](LICENSE)

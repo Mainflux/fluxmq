@@ -1,8 +1,2 @@
-# FluxMQ
 build
-
-# Visual Studio Code
-.vscode
-
-# Binary
-fluxmq
+test/aedes/node_modules
