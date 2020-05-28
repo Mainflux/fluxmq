@@ -5,12 +5,7 @@ import (
 
 	"github.com/eclipse/paho.mqtt.golang/packets"
 	"github.com/mainflux/mainflux/errors"
-	"github.com/mainflux/mainflux/logger"
-)
-
-const (
-	up direction = iota
-	down
+	"go.uber.org/zap"
 )
 
 var (
@@ -22,20 +17,18 @@ type direction int
 
 // Session represents MQTT Proxy session between client and broker.
 type Session struct {
-	logger   logger.Logger
-	inbound  net.Conn
-	outbound net.Conn
-	handler  Handler
-	Client   Client
+	logger  *zap.Logger
+	conn    net.Conn
+	handler Handler
+	Client  Client
 }
 
 // New creates a new Session.
-func New(inbound, outbound net.Conn, handler Handler, logger logger.Logger) *Session {
+func New(conn net.Conn, handler Handler, logger *zap.Logger) *Session {
 	return &Session{
-		logger:   logger,
-		inbound:  inbound,
-		outbound: outbound,
-		handler:  handler,
+		logger:  logger,
+		conn:    conn,
+		handler: handler,
 	}
 }
 
@@ -43,10 +36,9 @@ func New(inbound, outbound net.Conn, handler Handler, logger logger.Logger) *Ses
 func (s *Session) Stream() error {
 	// In parallel read from client, send to broker
 	// and read from broker, send to client.
-	errs := make(chan error, 2)
+	errs := make(chan error, 1)
 
-	go s.stream(up, s.inbound, s.outbound, errs)
-	go s.stream(down, s.outbound, s.inbound, errs)
+	go s.stream(s.conn, errs)
 
 	// Handle whichever error happens first.
 	// The other routine won't be blocked when writing
@@ -57,58 +49,8 @@ func (s *Session) Stream() error {
 	return err
 }
 
-func (s *Session) stream(dir direction, r, w net.Conn, errs chan error) {
-	for {
-		// Read from one connection
-		pkt, err := packets.ReadPacket(r)
-		if err != nil {
-			errs <- wrap(err, dir)
-			return
-		}
+func (s *Session) stream(conn net.Conn, errs chan error) {
 
-		if dir == up {
-			if err := s.authorize(pkt); err != nil {
-				errs <- wrap(err, dir)
-				return
-			}
-		}
-
-		// Send to another
-		if err := pkt.Write(w); err != nil {
-			errs <- wrap(err, dir)
-			return
-		}
-
-		if dir == up {
-			s.notify(pkt)
-		}
-	}
-}
-
-func (s *Session) authorize(pkt packets.ControlPacket) error {
-	switch p := pkt.(type) {
-	case *packets.ConnectPacket:
-		s.Client = Client{
-			ID:       p.ClientIdentifier,
-			Username: p.Username,
-			Password: p.Password,
-		}
-		if err := s.handler.AuthConnect(&s.Client); err != nil {
-			return err
-		}
-		// Copy back to the packet in case values are changed by Event handler.
-		// This is specific to CONN, as only that package type has credentials.
-		p.ClientIdentifier = s.Client.ID
-		p.Username = s.Client.Username
-		p.Password = s.Client.Password
-		return nil
-	case *packets.PublishPacket:
-		return s.handler.AuthPublish(&s.Client, &p.TopicName, &p.Payload)
-	case *packets.SubscribePacket:
-		return s.handler.AuthSubscribe(&s.Client, &p.Topics)
-	default:
-		return nil
-	}
 }
 
 func (s *Session) notify(pkt packets.ControlPacket) {
@@ -123,16 +65,5 @@ func (s *Session) notify(pkt packets.ControlPacket) {
 		s.handler.Unsubscribe(&s.Client, &p.Topics)
 	default:
 		return
-	}
-}
-
-func wrap(err error, dir direction) error {
-	switch dir {
-	case up:
-		return errors.Wrap(errClient, err)
-	case down:
-		return errors.Wrap(errBroker, err)
-	default:
-		return err
 	}
 }

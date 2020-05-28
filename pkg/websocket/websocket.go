@@ -7,7 +7,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/mainflux/fluxmq/pkg/session"
-	"github.com/mainflux/mainflux/logger"
+	"go.uber.org/zap"
 )
 
 // Proxy represents WS Proxy.
@@ -16,11 +16,11 @@ type Proxy struct {
 	path   string
 	scheme string
 	event  session.Handler
-	logger logger.Logger
+	logger *zap.Logger
 }
 
 // New - creates new HTTP proxy
-func New(target, path, scheme string, event session.Handler, logger logger.Logger) *Proxy {
+func New(target, path, scheme string, event session.Handler, logger *zap.Logger) *Proxy {
 	return &Proxy{
 		target: target,
 		path:   path,
@@ -85,7 +85,7 @@ func (p Proxy) pass(in *websocket.Conn) {
 	defer s.Close()
 	defer c.Close()
 
-	session := session.New(c, s, p.event, p.logger)
+	session := session.New(c, p.event, p.logger)
 	err = session.Stream()
 	errc <- err
 	p.logger.Warn("Broken connection for client: " + session.Client.ID + " with error: " + err.Error())

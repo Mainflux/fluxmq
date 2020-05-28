@@ -9,10 +9,10 @@ import (
 	"syscall"
 
 	"github.com/mainflux/fluxmq/examples/simple"
-	"github.com/mainflux/fluxmq/pkg/mqtt"
+	broker "github.com/mainflux/fluxmq/pkg/server"
 	"github.com/mainflux/fluxmq/pkg/session"
 	"github.com/mainflux/fluxmq/pkg/websocket"
-	mflog "github.com/mainflux/mainflux/logger"
+	"go.uber.org/zap"
 )
 
 const (
@@ -20,30 +20,22 @@ const (
 	defHTTPHost       = "0.0.0.0"
 	defHTTPPort       = "8080"
 	defHTTPScheme     = "ws"
-	defHTTPTargetHost = "localhost"
-	defHTTPTargetPort = "8888"
 	defHTTPTargetPath = "/mqtt"
 
-	envHTTPHost       = "MPROXY_HTTP_HOST"
-	envHTTPPort       = "MPROXY_HTTP_PORT"
-	envHTTPScheme     = "MPROXY_HTTP_SCHEMA"
-	envHTTPTargetHost = "MPROXY_HTTP_TARGET_HOST"
-	envHTTPTargetPort = "MPROXY_HTTP_TARGET_PORT"
-	envHTTPTargetPath = "MPROXY_HTTP_TARGET_PATH"
+	envHTTPHost       = "FLUXMQ_HTTP_HOST"
+	envHTTPPort       = "FLUXMQ_HTTP_PORT"
+	envHTTPScheme     = "FLUXMQ_HTTP_SCHEMA"
+	envHTTPTargetPath = "FLUXMQ_HTTP_TARGET_PATH"
 
 	// MQTT
-	defMQTTHost       = "0.0.0.0"
-	defMQTTPort       = "1883"
-	defMQTTTargetHost = "0.0.0.0"
-	defMQTTTargetPort = "1884"
+	defMQTTHost = "0.0.0.0"
+	defMQTTPort = "1883"
 
-	envMQTTHost       = "MPROXY_MQTT_HOST"
-	envMQTTPort       = "MPROXY_MQTT_PORT"
-	envMQTTTargetHost = "MPROXY_MQTT_TARGET_HOST"
-	envMQTTTargetPort = "MPROXY_MQTT_TARGET_PORT"
+	envMQTTHost = "FLUXMQ_MQTT_HOST"
+	envMQTTPort = "FLUXMQ_MQTT_PORT"
 
 	defLogLevel = "debug"
-	envLogLevel = "MPROXY_LOG_LEVEL"
+	envLogLevel = "FLUXMQ_LOG_LEVEL"
 )
 
 type config struct {
@@ -65,22 +57,23 @@ type config struct {
 func main() {
 	cfg := loadConfig()
 
-	logger, err := mflog.New(os.Stdout, cfg.logLevel)
+	logger, err := zap.NewProduction()
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
+	defer logger.Sync()
 
 	h := simple.New(logger)
 
 	errs := make(chan error, 3)
 
 	// HTTP
-	logger.Info(fmt.Sprintf("Starting HTTP proxy on port %s ", cfg.httpPort))
-	go proxyHTTP(cfg, logger, h, errs)
+	logger.Info("Starting HTTP server on port " + cfg.httpPort)
+	go serveHTTP(cfg, logger, h, errs)
 
 	// MQTT
-	logger.Info(fmt.Sprintf("Starting MQTT proxy on port %s ", cfg.mqttPort))
-	go proxyMQTT(cfg, logger, h, errs)
+	logger.Info("Starting MQTT server on port " + cfg.mqttPort)
+	go serveMQTT(cfg, logger, h, errs)
 
 	go func() {
 		c := make(chan os.Signal, 2)
@@ -89,7 +82,7 @@ func main() {
 	}()
 
 	err = <-errs
-	logger.Error(fmt.Sprintf("FluxMQ terminated: %s", err))
+	logger.Warn("FluxMQ terminated: " + err.Error())
 }
 
 func env(key, fallback string) string {
@@ -106,22 +99,18 @@ func loadConfig() config {
 		httpHost:       env(envHTTPHost, defHTTPHost),
 		httpPort:       env(envHTTPPort, defHTTPPort),
 		httpScheme:     env(envHTTPScheme, defHTTPScheme),
-		httpTargetHost: env(envHTTPTargetHost, defHTTPTargetHost),
-		httpTargetPort: env(envHTTPTargetPort, defHTTPTargetPort),
 		httpTargetPath: env(envHTTPTargetPath, defHTTPTargetPath),
 
 		// MQTT
-		mqttHost:       env(envMQTTHost, defMQTTHost),
-		mqttPort:       env(envMQTTPort, defMQTTPort),
-		mqttTargetHost: env(envMQTTTargetHost, defMQTTTargetHost),
-		mqttTargetPort: env(envMQTTTargetPort, defMQTTTargetPort),
+		mqttHost: env(envMQTTHost, defMQTTHost),
+		mqttPort: env(envMQTTPort, defMQTTPort),
 
 		// Log
 		logLevel: env(envLogLevel, defLogLevel),
 	}
 }
 
-func proxyHTTP(cfg config, logger mflog.Logger, handler session.Handler, errs chan error) {
+func serveHTTP(cfg config, logger *zap.Logger, handler session.Handler, errs chan error) {
 	target := fmt.Sprintf("%s:%s", cfg.httpTargetHost, cfg.httpTargetPort)
 	wp := websocket.New(target, cfg.httpTargetPath, cfg.httpScheme, handler, logger)
 	http.Handle("/mqtt", wp.Handler())
@@ -130,10 +119,10 @@ func proxyHTTP(cfg config, logger mflog.Logger, handler session.Handler, errs ch
 	errs <- http.ListenAndServe(p, nil)
 }
 
-func proxyMQTT(cfg config, logger mflog.Logger, handler session.Handler, errs chan error) {
+func serveMQTT(cfg config, logger *zap.Logger, handler session.Handler, errs chan error) {
 	address := fmt.Sprintf("%s:%s", cfg.mqttHost, cfg.mqttPort)
 	target := fmt.Sprintf("%s:%s", cfg.mqttTargetHost, cfg.mqttTargetPort)
-	mp := mqtt.New(address, target, handler, logger)
+	mqtt := broker.New(address, target, handler, logger)
 
-	errs <- mp.Proxy()
+	errs <- mqtt.ListenAndServe()
 }

@@ -5,18 +5,18 @@ import (
 	"strings"
 
 	"github.com/mainflux/fluxmq/pkg/session"
-	"github.com/mainflux/mainflux/logger"
+	"go.uber.org/zap"
 )
 
 var _ session.Handler = (*Handler)(nil)
 
 // Handler implements mqtt.Handler interface
 type Handler struct {
-	logger logger.Logger
+	logger *zap.Logger
 }
 
 // New creates new Event entity
-func New(logger logger.Logger) *Handler {
+func New(logger *zap.Logger) *Handler {
 	return &Handler{
 		logger: logger,
 	}
