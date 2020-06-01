@@ -1,31 +1,33 @@
 package server
 
 import (
-	"io"
 	"net"
 
 	"github.com/eclipse/paho.mqtt.golang/packets"
+	"github.com/mainflux/fluxmq/pkg/auth"
+	"github.com/mainflux/fluxmq/pkg/client"
 	"github.com/mainflux/fluxmq/pkg/session"
-	"github.com/mainflux/mainflux/errors"
 	"go.uber.org/zap"
 )
 
 // Server is main MQTT proxy struct
 type Server struct {
-	address string
-	target  string
-	handler session.Handler
-	logger  *zap.Logger
-	dialer  net.Dialer
+	address     string
+	handler     auth.Handler
+	logger      *zap.Logger
+	dialer      net.Dialer
+	sessionRepo *session.Repository
+	clientRepo  *client.Repository
 }
 
 // New returns a new mqtt Server instance.
-func New(address, target string, handler session.Handler, logger *zap.Logger) *Server {
+func New(address string, handler auth.Handler, sessionRepo *session.Repository, clientRepo *client.Repository, logger *zap.Logger) *Server {
 	return &Server{
-		address: address,
-		target:  target,
-		handler: handler,
-		logger:  logger,
+		address:     address,
+		handler:     handler,
+		logger:      logger,
+		sessionRepo: sessionRepo,
+		clientRepo:  clientRepo,
 	}
 }
 
@@ -40,7 +42,7 @@ func (s Server) ListenAndServe() error {
 	// Acceptor loop
 	s.accept(l)
 
-	s.logger.Info("Server Exiting...")
+	s.logger.Info("Server exiting...")
 	return nil
 }
 
@@ -48,11 +50,11 @@ func (s Server) accept(l net.Listener) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			s.logger.Warn("Accept error " + err.Error())
+			s.logger.Warn("accept error " + err.Error())
 			continue
 		}
 
-		s.logger.Info("Accepted new client")
+		s.logger.Info("accepted new client")
 		go s.handle(conn)
 	}
 }
@@ -63,7 +65,7 @@ func (s Server) handle(conn net.Conn) {
 	// Check if MQTT CONNECT
 	packet, err := packets.ReadPacket(conn)
 	if err != nil {
-		s.logger.Error("Error reading CONNECT")
+		s.logger.Error("Read connect packet error: ", zap.Error(err))
 		return
 	}
 	if packet == nil {
@@ -72,30 +74,70 @@ func (s Server) handle(conn net.Conn) {
 	}
 	msg, ok := packet.(*packets.ConnectPacket)
 	if !ok {
-		s.logger.Error("Received msg that was not Connect")
+		s.logger.Error("Received msg that was not CONNECT")
 		return
 	}
 
-	s.logger.Info("Read connect", zap.String("clientID", msg.ClientIdentifier))
+	s.logger.Info("Received CONNECT", zap.String("client_id", msg.ClientIdentifier))
 
 	connack := packets.NewControlPacket(packets.Connack).(*packets.ConnackPacket)
 	connack.SessionPresent = msg.CleanSession
 	connack.ReturnCode = msg.Validate()
 
+	// MQTT Client info
+	ci := client.NewInfo(msg.ClientIdentifier, msg.Username, msg.Password)
+
 	if connack.ReturnCode != packets.Accepted {
-		err = connack.Write(conn)
-		if err != nil {
-			s.logger.Error("Send connack error", zap.Error(err), zap.String("clientID", msg.ClientIdentifier))
-			return
+		if err := connack.Write(conn); err != nil {
+			s.logger.Error("Send CONNACK error, ", zap.Error(err), zap.String("client_id", string(ci.ID)))
 		}
 		return
 	}
 
-	ssn := session.New(conn, s.handler, s.logger)
-
-	if err = ssn.Stream(); !errors.Contains(err, io.EOF) {
-		//s.logger.Warn("Broken connection for client: " + s.Client.ID + " with error: " + err.Error())
+	// Handle Auth
+	if err := s.handler.AuthConnect(&ci); err != nil {
+		connack.ReturnCode = packets.ErrRefusedNotAuthorised
+		s.logger.Error("Auth error, ", zap.Error(err), zap.String("client_id", ci.ID))
+		if err := connack.Write(conn); err != nil {
+			s.logger.Error("Error witing response")
+		}
+		return
 	}
+
+	if err := connack.Write(conn); err != nil {
+		s.logger.Error("Send CONNACK error, ", zap.Error(err), zap.String("client_id", ci.ID))
+		return
+	}
+
+	// Last Will & Testament message
+	lwt := packets.NewControlPacket(packets.Publish).(*packets.PublishPacket)
+	if msg.WillFlag {
+		lwt.Qos = msg.WillQos
+		lwt.TopicName = msg.WillTopic
+		lwt.Retain = msg.WillRetain
+		lwt.Payload = msg.WillMessage
+		lwt.Dup = msg.Dup
+	} else {
+		lwt = nil
+	}
+
+	// ses, ok := s.sessionRepo.Sessions[ci.ID]
+	// if !ok {
+	// 	ses := session.New(ci.ID, conn, s.logger)
+	// 	connack.SessionPresent = false
+	// } else {
+	// 	connack.SessionPresent = true
+	// }
+
+	c, ok := s.clientRepo.Clients[ci.ID]
+	if !ok {
+		c = client.New(ci, msg.Keepalive, lwt, s.logger)
+	} else {
+		// TODO: Client with this ID already exists - close old one
+	}
+
+	c.ReadLoop()
+
 }
 
 func (s Server) close(conn net.Conn) {
