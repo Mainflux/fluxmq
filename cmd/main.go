@@ -7,11 +7,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/mainflux/fluxmq/auth"
+	"github.com/mainflux/fluxmq/client"
 	"github.com/mainflux/fluxmq/examples/simple"
-	"github.com/mainflux/fluxmq/pkg/auth"
-	"github.com/mainflux/fluxmq/pkg/client"
-	broker "github.com/mainflux/fluxmq/pkg/server"
-	"github.com/mainflux/fluxmq/pkg/session"
+	broker "github.com/mainflux/fluxmq/server"
+	"github.com/mainflux/fluxmq/session"
 	"go.uber.org/zap"
 )
 

@@ -4,9 +4,9 @@ import (
 	"net"
 
 	"github.com/eclipse/paho.mqtt.golang/packets"
-	"github.com/mainflux/fluxmq/pkg/auth"
-	"github.com/mainflux/fluxmq/pkg/client"
-	"github.com/mainflux/fluxmq/pkg/session"
+	"github.com/mainflux/fluxmq/auth"
+	"github.com/mainflux/fluxmq/client"
+	"github.com/mainflux/fluxmq/session"
 	"go.uber.org/zap"
 )
 
@@ -131,7 +131,7 @@ func (s Server) handle(conn net.Conn) {
 
 	c, ok := s.clientRepo.Clients[ci.ID]
 	if !ok {
-		c = client.New(ci, msg.Keepalive, lwt, s.logger)
+		c = client.New(ci, conn, msg.Keepalive, lwt, s.handler, s.logger)
 	} else {
 		// TODO: Client with this ID already exists - close old one
 	}
