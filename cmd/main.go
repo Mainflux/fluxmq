@@ -28,11 +28,13 @@ const (
 )
 
 type config struct {
+	// MQTT
 	mqttHost       string
 	mqttPort       string
 	mqttTargetHost string
 	mqttTargetPort string
 
+	//Log
 	logLevel string
 }
 

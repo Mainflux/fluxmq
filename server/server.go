@@ -131,12 +131,21 @@ func (s Server) handle(conn net.Conn) {
 
 	c, ok := s.clientRepo.Clients[ci.ID]
 	if !ok {
-		c = client.New(ci, conn, msg.Keepalive, lwt, s.handler, s.logger)
+		c = client.New(ci, conn, s.logger)
 	} else {
 		// TODO: Client with this ID already exists - close old one
 	}
 
-	c.ReadLoop()
+	// Find Session for this client
+	ses, ok := s.sessionRepo.Session(ci.ID)
+	if !ok {
+		ses = session.New(c, conn, msg.Keepalive, lwt, s.sessionRepo, s.logger)
+		connack.SessionPresent = false
+	} else {
+		connack.SessionPresent = true
+	}
+
+	ses.ReadLoop()
 
 }
 

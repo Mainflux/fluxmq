@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mainflux/fluxmq/pkg/auth"
-	"github.com/mainflux/fluxmq/pkg/client"
+	"github.com/mainflux/fluxmq/auth"
+	"github.com/mainflux/fluxmq/client"
 	"go.uber.org/zap"
 )
 
 var _ auth.Handler = (*Handler)(nil)
 
-// Handler implements mqtt.Handler interface
+// Handler implements client.AuthHandler interface
 type Handler struct {
 	logger *zap.Logger
 }
@@ -25,46 +25,46 @@ func New(logger *zap.Logger) *Handler {
 
 // AuthConnect is called on device connection,
 // prior forwarding to the MQTT broker
-func (h *Handler) AuthConnect(c *client.ClientInfo) error {
+func (h *Handler) AuthConnect(c *client.Info) error {
 	h.logger.Info(fmt.Sprintf("AuthRegister() - clientID: %s, username: %s, password: %s", c.ID, c.Username, string(c.Password)))
 	return nil
 }
 
 // AuthPublish is called on device publish,
 // prior forwarding to the MQTT broker
-func (h *Handler) AuthPublish(c *client.ClientInfo, topic *string, payload *[]byte) error {
+func (h *Handler) AuthPublish(c *client.Info, topic *string, payload *[]byte) error {
 	h.logger.Info(fmt.Sprintf("AuthPublish() - clientID: %s, topic: %s, payload: %s", c.ID, *topic, string(*payload)))
 	return nil
 }
 
 // AuthSubscribe is called on device publish,
 // prior forwarding to the MQTT broker
-func (h *Handler) AuthSubscribe(c *client.ClientInfo, topics *[]string) error {
-	h.logger.Info(fmt.Sprintf("AuthSubscribe() - clientID: %s, topics: %s", c.ID, strings.Join(*topics, ",")))
+func (h *Handler) AuthSubscribe(c *client.Info, topic *string) error {
+	h.logger.Info(fmt.Sprintf("AuthSubscribe() - clientID: %s, topic: %s", c.ID, *topic))
 	return nil
 }
 
 // Connect - after client successfully connected
-func (h *Handler) Connect(c *client.ClientInfo) {
+func (h *Handler) Connect(c *client.Info) {
 	h.logger.Info(fmt.Sprintf("Register() - username: %s, clientID: %s", c.Username, c.ID))
 }
 
 // Publish - after client successfully published
-func (h *Handler) Publish(c *client.ClientInfo, topic *string, payload *[]byte) {
+func (h *Handler) Publish(c *client.Info, topic *string, payload *[]byte) {
 	h.logger.Info(fmt.Sprintf("Publish() - username: %s, clientID: %s, topic: %s, payload: %s", c.Username, c.ID, *topic, string(*payload)))
 }
 
 // Subscribe - after client successfully subscribed
-func (h *Handler) Subscribe(c *client.ClientInfo, topics *[]string) {
+func (h *Handler) Subscribe(c *client.Info, topics *[]string) {
 	h.logger.Info(fmt.Sprintf("Subscribe() - username: %s, clientID: %s, topics: %s", c.Username, c.ID, strings.Join(*topics, ",")))
 }
 
 // Unsubscribe - after client unsubscribed
-func (h *Handler) Unsubscribe(c *client.ClientInfo, topics *[]string) {
+func (h *Handler) Unsubscribe(c *client.Info, topics *[]string) {
 	h.logger.Info(fmt.Sprintf("Unsubscribe() - username: %s, clientID: %s, topics: %s", c.Username, c.ID, strings.Join(*topics, ",")))
 }
 
 // Disconnect on conection lost
-func (h *Handler) Disconnect(c *client.ClientInfo) {
+func (h *Handler) Disconnect(c *client.Info) {
 	h.logger.Info(fmt.Sprintf("Disconnect() - client with username: %s and ID: %s disconenected", c.Username, c.ID))
 }

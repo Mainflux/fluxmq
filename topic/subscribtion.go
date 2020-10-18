@@ -1,19 +1,19 @@
 package topic
 
 type Subscription struct {
-	Client string
-	Topic  string
-	Qos    byte
-	Shared bool
-	Group  string
+	ClientID string
+	Topic    string
+	Qos      byte
+	Shared   bool
+	Group    string
 }
 
-func NewSubscription(Client, Topic string, Qos byte, Shared bool, Group string) Subscription {
-	return s := Subscription {
-		Client: client,
-		Topic: topic,
-		Qos: qos,
-		Shared: shared,
-		Group: group
+func NewSubscription(clientID string, topic string, qos byte, shared bool, group string) Subscription {
+	return Subscription{
+		ClientID: clientID,
+		Topic:    topic,
+		Qos:      qos,
+		Shared:   shared,
+		Group:    group,
 	}
 }
