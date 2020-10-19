@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/eclipse/paho.mqtt.golang/packets"
+	"github.com/mainflux/fluxmq"
 )
 
 var _ Manager = (*memManager)(nil)
@@ -33,38 +34,39 @@ func NewMemManager() *memManager {
 }
 
 func (m *memManager) Subscribe(sub Subscription) (byte, error) {
-	if !validQos(sub.Qos) {
-		return qosFailure, fmt.Errorf("Invalid QoS %d", qos)
+	if !fluxmq.ValidateQoS(sub.QoS) {
+		return qosFailure, fmt.Errorf("Invalid QoS %d", sub.QoS)
 	}
 
-	if sub == nil {
-		return qosFailure, fmt.Errorf("Subscriber cannot be nil")
-	}
+	//if sub == nil {
+	//	return qosFailure, fmt.Errorf("Subscriber cannot be nil")
+	//}
 
 	m.smu.Lock()
 	defer m.smu.Unlock()
 
-	if sub.qos > qos1 {
-		sub.qos = qos1
+	if sub.QoS > fluxmq.QoS1 {
+		sub.QoS = fluxmq.QoS1
 	}
 
-	if err := m.sroot.sinsert(sub); err != nil {
-		return qosFailure, err
-	}
+	//if err := m.sroot.sinsert(sub); err != nil {
+	//	return qosFailure, err
+	//}
 
-	return qos, nil
+	return sub.QoS, nil
 }
 
 func (m *memManager) Unsubscribe(sub Subscription) error {
 	m.smu.Lock()
 	defer m.smu.Unlock()
 
-	return m.sroot.sremove(sub)
+	//return m.sroot.sremove(sub)
+	return nil
 }
 
 // Returned values will be invalidated by the next Subscribers call
 func (this *memManager) Subscribers(topic []byte, qos byte, subs *[]interface{}, qoss *[]byte) error {
-	if !ValidQos(qos) {
+	if !fluxmq.ValidateQoS(qos) {
 		return fmt.Errorf("Invalid QoS %d", qos)
 	}
 

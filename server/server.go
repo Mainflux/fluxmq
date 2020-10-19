@@ -1,10 +1,12 @@
+// Copyright (c) Mainflux
+// SPDX-License-Identifier: Apache-2.0
+
 package server
 
 import (
 	"net"
 
 	"github.com/eclipse/paho.mqtt.golang/packets"
-	"github.com/mainflux/fluxmq/auth"
 	"github.com/mainflux/fluxmq/client"
 	"github.com/mainflux/fluxmq/session"
 	"go.uber.org/zap"
@@ -13,7 +15,6 @@ import (
 // Server is main MQTT proxy struct
 type Server struct {
 	address     string
-	handler     auth.Handler
 	logger      *zap.Logger
 	dialer      net.Dialer
 	sessionRepo *session.Repository
@@ -21,10 +22,9 @@ type Server struct {
 }
 
 // New returns a new mqtt Server instance.
-func New(address string, handler auth.Handler, sessionRepo *session.Repository, clientRepo *client.Repository, logger *zap.Logger) *Server {
+func New(address string, sessionRepo *session.Repository, clientRepo *client.Repository, logger *zap.Logger) *Server {
 	return &Server{
 		address:     address,
-		handler:     handler,
 		logger:      logger,
 		sessionRepo: sessionRepo,
 		clientRepo:  clientRepo,
@@ -90,16 +90,6 @@ func (s Server) handle(conn net.Conn) {
 	if connack.ReturnCode != packets.Accepted {
 		if err := connack.Write(conn); err != nil {
 			s.logger.Error("Send CONNACK error, ", zap.Error(err), zap.String("client_id", string(ci.ID)))
-		}
-		return
-	}
-
-	// Handle Auth
-	if err := s.handler.AuthConnect(&ci); err != nil {
-		connack.ReturnCode = packets.ErrRefusedNotAuthorised
-		s.logger.Error("Auth error, ", zap.Error(err), zap.String("client_id", ci.ID))
-		if err := connack.Write(conn); err != nil {
-			s.logger.Error("Error witing response")
 		}
 		return
 	}

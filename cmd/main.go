@@ -1,3 +1,6 @@
+// Copyright (c) Mainflux
+// SPDX-License-Identifier: Apache-2.0
+
 package main
 
 import (
@@ -7,9 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/mainflux/fluxmq/auth"
 	"github.com/mainflux/fluxmq/client"
-	"github.com/mainflux/fluxmq/examples/simple"
 	broker "github.com/mainflux/fluxmq/server"
 	"github.com/mainflux/fluxmq/session"
 	"go.uber.org/zap"
@@ -47,7 +48,6 @@ func main() {
 	}
 	defer logger.Sync()
 
-	h := simple.New(logger)
 	sRepo := session.NewRepository()
 	cRepo := client.NewRepository()
 
@@ -55,7 +55,7 @@ func main() {
 
 	// MQTT
 	logger.Info("Starting MQTT server on port " + cfg.mqttPort)
-	go serveMQTT(cfg, logger, h, sRepo, cRepo, errs)
+	go serveMQTT(cfg, logger, sRepo, cRepo, errs)
 
 	go func() {
 		c := make(chan os.Signal, 2)
@@ -86,10 +86,10 @@ func loadConfig() config {
 	}
 }
 
-func serveMQTT(cfg config, logger *zap.Logger, handler auth.Handler,
-	sRepo *session.Repository, cRepo *client.Repository, errs chan error) {
+func serveMQTT(cfg config, logger *zap.Logger, sRepo *session.Repository,
+	cRepo *client.Repository, errs chan error) {
 	address := fmt.Sprintf("%s:%s", cfg.mqttHost, cfg.mqttPort)
-	mqtt := broker.New(address, handler, sRepo, cRepo, logger)
+	mqtt := broker.New(address, sRepo, cRepo, logger)
 
 	errs <- mqtt.ListenAndServe()
 }
