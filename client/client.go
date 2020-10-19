@@ -1,3 +1,6 @@
+// Copyright (c) Mainflux
+// SPDX-License-Identifier: Apache-2.0
+
 package client
 
 import (
@@ -6,13 +9,6 @@ import (
 
 	"github.com/mainflux/fluxmq/topic"
 	"go.uber.org/zap"
-)
-
-const (
-	qos0 byte = iota
-	qos1
-	qos2
-	qosFail = 0x80
 )
 
 var groupRegexp = regexp.MustCompile(`^\$share/([0-9a-zA-Z_-]+)/(.*)$`)

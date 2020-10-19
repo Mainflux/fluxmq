@@ -1,9 +1,12 @@
+// Copyright (c) Mainflux
+// SPDX-License-Identifier: Apache-2.0
+
 package topic
 
 type Subscription struct {
 	ClientID string
 	Topic    string
-	Qos      byte
+	QoS      byte
 	Shared   bool
 	Group    string
 }
@@ -12,7 +15,7 @@ func NewSubscription(clientID string, topic string, qos byte, shared bool, group
 	return Subscription{
 		ClientID: clientID,
 		Topic:    topic,
-		Qos:      qos,
+		QoS:      qos,
 		Shared:   shared,
 		Group:    group,
 	}
